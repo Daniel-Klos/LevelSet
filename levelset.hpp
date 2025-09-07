@@ -125,7 +125,7 @@ struct LevelSet {
         }
     }
 
-    void FastSweep() {
+    void FastSweep(float solidCells) {
         for (int i = 0; i < gridSize; ++i) {
             if (grid[i] == SOLID) {
                 phi[i] = 0.0f;            // inside obstacle
@@ -154,7 +154,7 @@ struct LevelSet {
                     int top    = gridPos - 1;
                     int bottom = gridPos + 1;
 
-                    if (grid[gridPos]) {
+                    if (!grid[gridPos]) {
                         if (iy == 0 || iy == (nY - 1)) {
                             if (iy == 0) {
                                 aa[1] = phi[gridPos] < phi[bottom] ? phi[gridPos] : phi[bottom];
