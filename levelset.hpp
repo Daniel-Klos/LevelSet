@@ -72,11 +72,8 @@ struct LevelSet {
             grid[i] = distrib(gen);
         }*/
 
-        /*int center = (nX / 2) * nY + (nY / 2);
-        grid[center] = 1;*/
-
-        float R = 120;   // outer radius
-        float r = 80;    // inner radius
+        float R = 18;   // outer radius
+        float r = 10;    // inner radius
 
         for (int ix = 0; ix < nX; ++ix) {
             for (int iy = 0; iy < nY; ++iy) {
@@ -86,9 +83,20 @@ struct LevelSet {
                 float dy = iy - nY / 2;
                 float d2 = dx*dx + dy*dy;
             
-                grid[idx] = (d2 <= R*R && d2 >= r*r) ? 1 : 0;
+                grid[idx] = (d2 <= R*R && d2 >= r*r) ? SOLID : AIR;
             }
         }
+
+        int center = (nX / 2) * nY + (nY / 2);
+        int left = center - nY;
+        int top = center - 1;
+        int topLeft = center - 1 - nY;
+        grid[center]  = SOLID;
+        grid[left]    = SOLID;
+        grid[top]     = SOLID;
+        grid[topLeft] = SOLID;
+
+        SetUpPhi();
 
         FastSweep();
 
@@ -108,10 +116,6 @@ struct LevelSet {
 
         rect.setPosition(cellPos);
         window.draw(rect);
-
-        /*text.setString(std::to_string(phi[cellID]));
-        text.setPosition(cellPos);
-        window.draw(text);*/
     }
 
     void DrawSolidCells() {
@@ -125,16 +129,18 @@ struct LevelSet {
         }
     }
 
-    void FastSweep(float solidCells) {
+    void SetUpPhi() {
         for (int i = 0; i < gridSize; ++i) {
             if (grid[i] == SOLID) {
-                phi[i] = 0.0f;            // inside obstacle
+                phi[i] = 1e6f;
             }
             else {
-                phi[i] = 1e6f;            // large distance for air
+                phi[i] = 0.f;
             }
         }
+    }
 
+    void FastSweep() {
         const int NSweeps = 4;
         // sweep directions { start, end, step }
         const int dirX[NSweeps][3] = { {0, nX - 1,  1}, {nX - 1, 0, -1}, {nX - 1, 0,  -1}, {0, nX - 1,   1} };
@@ -143,7 +149,7 @@ struct LevelSet {
         double aa[2], eps = 1e-6;
         double d_new, a, b;
         int s, ix, iy, gridPos;
-        const double h = 1.0, f = 1.0;
+        const double h = cellSpacing, f = 1.0; // h = 1.0
 
         for (s = 0; s < NSweeps; s++) {
             for (ix = dirX[s][0]; dirX[s][2] * ix <= dirX[s][1]; ix += dirX[s][2]) {
@@ -154,7 +160,7 @@ struct LevelSet {
                     int top    = gridPos - 1;
                     int bottom = gridPos + 1;
 
-                    if (!grid[gridPos]) {
+                    if (grid[gridPos]) {
                         if (iy == 0 || iy == (nY - 1)) {
                             if (iy == 0) {
                                 aa[1] = phi[gridPos] < phi[bottom] ? phi[gridPos] : phi[bottom];
@@ -195,27 +201,9 @@ struct LevelSet {
                 int idx = i * nY + j;
                 float x = i * cellSpacing;
                 float y = j * cellSpacing;
-                dphi[idx] = QueryLevelSet(sf::Vector2f{x, y});
+                dphi[idx] = sampleGradient(sf::Vector2f{x, y});
             }
         }
-    }
-
-    sf::Vector2f QueryLevelSet(sf::Vector2f pos) {
-        float x = pos.x;
-        float y = pos.y;
-
-        float d = samplePhi(pos);
-
-        float eps = 1e-1;
-
-        float ddx = (samplePhi(pos + sf::Vector2f{pos.x + eps, pos.y}) - samplePhi(pos + sf::Vector2f{pos.x - eps, pos.y})) / (2 * eps);
-
-        float ddy = (samplePhi(pos + sf::Vector2f{pos.x, pos.y + eps}) - samplePhi(pos + sf::Vector2f{pos.x, pos.y - eps})) / (2 * eps);
-
-        float div = sqrt(ddx * ddx + ddy * ddy);
-        sf::Vector2f grad = sf::Vector2{ddx / div, ddy / div};
-
-        return pos - d * grad;
     }
 
     float samplePhi(sf::Vector2f pos) {
@@ -224,8 +212,6 @@ struct LevelSet {
 
         int i = std::clamp(std::floor(x / cellSpacing), 0.f, static_cast<float>(nX - 1));
         int j = std::clamp(std::floor(y / cellSpacing), 0.f, static_cast<float>(nY - 1));
-
-        //return phi[i * nY + j];
 
         float fx = (x / cellSpacing - i);
         float fy = (y / cellSpacing - j);
@@ -263,16 +249,9 @@ struct LevelSet {
 
     void DrawClosestSurfacePoint() {
         sf::Vector2f mousePos = static_cast<sf::Vector2f>(sf::Mouse::getPosition(window));
-        //sf::Vector2f point = QueryLevelSet(mousePos);
         sf::Vector2f surfacePoint = ClosestSurfacePoint(mousePos);
 
-        /*text.setPosition(mousePos.x, mousePos.y);
-        std::string grad = "{" + std::to_string(point.x) + ", " + std::to_string(point.y) + "}";
-        text.setString(grad);
-        window.draw(text);*/
-
         circle.setPosition(surfacePoint);
-
         window.draw(circle);
     }
 
@@ -308,7 +287,7 @@ struct LevelSet {
 
     void update() {
         DrawSDF();
-        //DrawSolidCells();
+        DrawSolidCells();
         DrawClosestSurfacePoint();
     }
 
