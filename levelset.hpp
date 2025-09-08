@@ -43,6 +43,8 @@ struct LevelSet {
     float WIDTH;
     float HEIGHT;
 
+    bool drawSolidCells = true;
+
     LevelSet(sf::Text text_, sf::RenderWindow &window_, int nX_, float WIDTH_, float HEIGHT_): WIDTH(WIDTH_), HEIGHT(HEIGHT_), text(text_), window(window_), nX(nX_), gen(std::random_device{}()), distrib(0.5) {
         cellSpacing = WIDTH / nX;
         halfSpacing = cellSpacing * 0.5;
@@ -68,9 +70,9 @@ struct LevelSet {
         grid.resize(gridSize);
         phi.resize(gridSize);
 
-        /*for (int i = 0; i < gridSize; ++i) {
+        for (int i = 0; i < gridSize; ++i) {
             grid[i] = distrib(gen);
-        }*/
+        }
 
         int donutOuterRad = nX / 3.333333;
         int donutInnerRad = nX / 6.25;
@@ -88,8 +90,11 @@ struct LevelSet {
     }
 
     void CreateDonut(int outerRadius, int innerRadius) {
-        for (int ix = 0; ix < nX; ++ix) {
-            for (int iy = 0; iy < nY; ++iy) {
+        int centerX = nX / 2;
+        int centerY = nY / 2;
+        int padding = 3;
+        for (int ix = centerX - (outerRadius + padding); ix < centerX + (outerRadius + padding); ++ix) {
+            for (int iy = centerY - (outerRadius + padding); iy < centerY + (outerRadius + padding); ++iy) {
                 int idx = ix * nY + iy;
             
                 float dx = ix - nX / 2;
@@ -307,7 +312,9 @@ struct LevelSet {
 
     void update() {
         DrawSDF();
-        DrawSolidCells();
+        if (drawSolidCells) {
+            DrawSolidCells();
+        }
         DrawClosestSurfacePoint();
     }
 
@@ -343,5 +350,9 @@ struct LevelSet {
                 std::cout << "]";
             }
         }
+    }
+
+    void changeDrawSolidCells() {
+        drawSolidCells = !drawSolidCells;
     }
 };

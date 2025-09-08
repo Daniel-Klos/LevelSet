@@ -33,7 +33,7 @@ int main()
     int frame = 0;
     int fps = 0;
 
-    int nX = 30;
+    int nX = 60;
     LevelSet SDF = LevelSet(text, window, nX, WIDTH, HEIGHT);
 
     while (window.isOpen())
@@ -51,7 +51,11 @@ int main()
             else if (event.key.code == sf::Keyboard::Q) {
                 window.close();
             }
-
+            else if (event.type == sf::Event::KeyPressed) {
+                if (event.key.code == sf::Keyboard::D) {
+                    SDF.changeDrawSolidCells();
+                }
+            }
         }
 
         window.clear();
