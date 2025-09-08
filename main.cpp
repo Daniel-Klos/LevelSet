@@ -33,7 +33,7 @@ int main()
     int frame = 0;
     int fps = 0;
 
-    int nX = 50;
+    int nX = 30;
     LevelSet SDF = LevelSet(text, window, nX, WIDTH, HEIGHT);
 
     while (window.isOpen())

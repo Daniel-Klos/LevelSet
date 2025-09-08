@@ -72,9 +72,22 @@ struct LevelSet {
             grid[i] = distrib(gen);
         }*/
 
-        float R = 18;   // outer radius
-        float r = 10;    // inner radius
+        int donutOuterRad = nX / 3.333333;
+        int donutInnerRad = nX / 6.25;
 
+        CreateDonut(donutOuterRad, donutInnerRad);
+
+        int squareWidth = nX / 10;
+        CreateCenterSquare(squareWidth);
+
+        SetUpPhi();
+
+        FastSweep();
+
+        //printPhiAndGrid();
+    }
+
+    void CreateDonut(int outerRadius, int innerRadius) {
         for (int ix = 0; ix < nX; ++ix) {
             for (int iy = 0; iy < nY; ++iy) {
                 int idx = ix * nY + iy;
@@ -83,24 +96,22 @@ struct LevelSet {
                 float dy = iy - nY / 2;
                 float d2 = dx*dx + dy*dy;
             
-                grid[idx] = (d2 <= R*R && d2 >= r*r) ? SOLID : AIR;
+                grid[idx] = (d2 <= outerRadius*outerRadius && d2 >= innerRadius*innerRadius) ? SOLID : AIR;
             }
         }
+    }
 
-        int center = (nX / 2) * nY + (nY / 2);
-        int left = center - nY;
-        int top = center - 1;
-        int topLeft = center - 1 - nY;
-        grid[center]  = SOLID;
-        grid[left]    = SOLID;
-        grid[top]     = SOLID;
-        grid[topLeft] = SOLID;
+    void CreateCenterSquare(int width) {
+        int halfWidth = width / 2;
+        int centerX = nX / 2;
+        int centerY = nY / 2;
 
-        SetUpPhi();
-
-        FastSweep();
-
-        //printPhiAndGrid();
+        for (int ix = centerX - halfWidth; ix <= centerX + halfWidth; ++ix) {
+            for (int iy = centerY - halfWidth; iy <= centerY + halfWidth; ++iy) {
+                int idx = ix * nY + iy;
+                grid[idx] = SOLID;
+            }
+        }
     }
 
     sf::Vector2f gridCellToPos(int idx) {
@@ -210,29 +221,38 @@ struct LevelSet {
         int x = pos.x;
         int y = pos.y;
 
-        int i = std::clamp(std::floor(x / cellSpacing), 0.f, static_cast<float>(nX - 1));
-        int j = std::clamp(std::floor(y / cellSpacing), 0.f, static_cast<float>(nY - 1));
+        float gx = x / cellSpacing - 0.5f;
+        float gy = y / cellSpacing - 0.5f;
 
-        float fx = (x / cellSpacing - i);
-        float fy = (y / cellSpacing - j);
-
-        int idx = i * nY + j;
+        int i0 = std::clamp(int(std::floor(gx)), 0, nX - 1);
+        int j0 = std::clamp(int(std::floor(gy)), 0, nY - 1);
+        int i1 = std::min(i0 + 1, nX - 1);
+        int j1 = std::min(j0 + 1, nY - 1);
         
-        float topLeft = phi[idx];
-        float topRight = phi[idx + nY];
-        float bottomLeft = phi[idx + 1];
-        float bottomRight = phi[idx + nY + 1];
+        float fx = gx - i0;
+        float fy = gy - j0;
 
-        float v0 = (1.f - fx) * topLeft + fx * topRight;
-        float v1 = (1.f - fx) * bottomLeft + fx * bottomRight;
+        int topLeft     = i0 * nY + j0;
+        int topRight    = i1 * nY + j0;
+        int bottomLeft  = i0 * nY + j1;
+        int bottomRight = i1 * nY + j1;
 
-        return (1.f - fy) * v0 + fy * v1;
+        float topLeftVal     = phi[topLeft];
+        float topRightVal    = phi[topRight];
+        float bottomLeftVal  = phi[bottomLeft];
+        float bottomRightVal = phi[bottomRight];
+
+        float v0 = (1 - fx) * topLeftVal    + fx * topRightVal;
+        float v1 = (1 - fx) * bottomLeftVal + fx * bottomRightVal;
+        return (1 - fy) * v0 + fy * v1;
     }
 
     sf::Vector2f sampleGradient(sf::Vector2f pos) {
-        float eps = cellSpacing * 0.5f; // small step in world units
+        float eps = cellSpacing * 0.001f; // cellSpacing * 0.5f, small step in world units
+        
         float ddx = (samplePhi(pos + sf::Vector2f{eps, 0}) -
                      samplePhi(pos - sf::Vector2f{eps, 0})) / (2 * eps);
+
         float ddy = (samplePhi(pos + sf::Vector2f{0, eps}) -
                      samplePhi(pos - sf::Vector2f{0, eps})) / (2 * eps);
 
