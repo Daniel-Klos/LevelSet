@@ -33,7 +33,7 @@ int main()
     int frame = 0;
     int fps = 0;
 
-    int nX = 60;
+    int nX = 120; // 60
     LevelSet SDF = LevelSet(text, window, nX, WIDTH, HEIGHT);
 
     while (window.isOpen())
@@ -55,6 +55,41 @@ int main()
                 if (event.key.code == sf::Keyboard::D) {
                     SDF.changeDrawSolidCells();
                 }
+                else if (event.key.code == sf::Keyboard::G) {
+                    SDF.increaseNumStepIters();
+                }
+                else if (event.key.code == sf::Keyboard::F) {
+                    SDF.decreaseNumStepIters();
+                }
+                else if (event.key.code == sf::Keyboard::J) {
+                    SDF.increaseInsideNumStepIters();
+                }
+                else if (event.key.code == sf::Keyboard::H) {
+                    SDF.decreaseInsideNumStepIters();
+                }
+                else if (event.key.code == sf::Keyboard::W) {
+                    SDF.SwitchSDFRendering();
+                }
+            }
+            else if (event.type == sf::Event::MouseButtonPressed) {
+                if (event.mouseButton.button == sf::Mouse::Left) {
+                    SDF.SetDrawer(true);
+                }
+                else if (event.mouseButton.button == sf::Mouse::Right) {
+                    SDF.SetEraser(true);
+                }
+            }
+            else if (event.type == sf::Event::MouseButtonReleased) {
+                if (event.mouseButton.button == sf::Mouse::Left) {
+                    SDF.SetDrawer(false);
+                }
+                else if (event.mouseButton.button == sf::Mouse::Right) {
+                    SDF.SetEraser(false);
+                }
+            }
+            else if (event.type == sf::Event::MouseWheelScrolled) {
+                int mouseWheelDelta = event.mouseWheelScroll.delta;
+                SDF.AddToDrawerRadius(mouseWheelDelta);
             }
         }
 

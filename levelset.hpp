@@ -2,9 +2,12 @@
 
 #include <SFML/Graphics.hpp>
 #include <vector>
+#include <array>
 #include <cmath>
 #include <random>
 #include <iostream>
+
+#include <chrono>
 
 struct Vector2 {
     float x;
@@ -28,8 +31,15 @@ struct LevelSet {
     int SOLID = 1;
 
     sf::RectangleShape rect;
-    sf::RectangleShape tinyRect;
+
+    //sf::RectangleShape tinyRect;
+
+    sf::VertexArray SDFva{sf::PrimitiveType::Quads};
+    sf::Texture texture;
+    sf::RenderStates states;
+    sf::Vector2f texture_size;
     float stepSize = 2.f;
+    int vaGridSize;
 
     sf::RenderWindow &window;
 
@@ -43,18 +53,74 @@ struct LevelSet {
     float WIDTH;
     float HEIGHT;
 
+    int numStepIters = 2;
+    int numInsideStepIters = 2;
+
     bool drawSolidCells = true;
+
+    bool drawing = false;
+    bool erasing = false;
+
+    bool wave = true;
+
+    int drawerRadius = 1;
+
+    std::array<std::array<float, 3>, 2> SDFcolors = {{{255.f, 150.f, 0.f}, {0.f, 80.f, 255.f}}};
+
+    std::array<std::array<int, 3>, 50> SDFgradient;
 
     LevelSet(sf::Text text_, sf::RenderWindow &window_, int nX_, float WIDTH_, float HEIGHT_): WIDTH(WIDTH_), HEIGHT(HEIGHT_), text(text_), window(window_), nX(nX_), gen(std::random_device{}()), distrib(0.5) {
         cellSpacing = WIDTH / nX;
         halfSpacing = cellSpacing * 0.5;
 
-        rect.setFillColor(sf::Color::Transparent);
+        rect.setFillColor(sf::Color::White);
         rect.setSize(sf::Vector2f{cellSpacing, cellSpacing});
         rect.setOutlineThickness(1.f);
         rect.setOutlineColor(sf::Color::White);
 
-        tinyRect.setSize(sf::Vector2f{stepSize, stepSize});
+        //tinyRect.setSize(sf::Vector2f{stepSize, stepSize});
+        vaGridSize = (WIDTH / stepSize) * (HEIGHT / stepSize);
+        SDFva.resize(4 * vaGridSize);
+        texture.loadFromFile("white_square.png");
+        //texture.generateMipmap();
+        texture_size = static_cast<sf::Vector2f>(texture.getSize());
+        for (uint32_t i = 0; i < WIDTH / stepSize; ++i) {
+            for (uint32_t j = 0; j < HEIGHT / stepSize; ++j) {
+                int index = i * (HEIGHT / stepSize) + j;
+                int vaIdx = 4 * index;
+
+                float halfStepSize = stepSize * 0.5f;
+                float px = i * stepSize + halfStepSize;
+                float py = j * stepSize + halfStepSize;
+                SDFva[vaIdx].position = {px - halfStepSize, py - halfStepSize};
+                SDFva[vaIdx + 1].position = {px + halfStepSize, py - halfStepSize};
+                SDFva[vaIdx + 2].position = {px + halfStepSize, py + halfStepSize};
+                SDFva[vaIdx + 3].position = {px - halfStepSize, py + halfStepSize};
+
+                SDFva[vaIdx].texCoords = {0.f, 0.f};
+                SDFva[vaIdx + 1].texCoords = {texture_size.x, 0.f};
+                SDFva[vaIdx + 2].texCoords = {texture_size.x, texture_size.y};
+                SDFva[vaIdx + 3].texCoords = {0.f, texture_size.y};
+            }
+        }
+        states.texture = &texture;
+
+        // lerp between the values in colorMap to create a gradient array 
+        float num_colors = SDFcolors.size() - 1; // number of colors - 1
+        float num_steps = 1.f * SDFgradient.size() / num_colors; //num_steps = 50 * key_range
+        int index = 0;
+        for (int i = 0; i < num_colors; ++i) {  
+            for (int x = 0; x < num_steps; ++x) {
+                float t = 1.f * x / num_steps;  // Interpolation factor
+                // lerp for r, g, b values between colorMap[i] and colorMap [i+1]
+                int r = (int)(SDFcolors[i][0] * (1 - t) + SDFcolors[i + 1][0] * t);
+                int g = (int)(SDFcolors[i][1] * (1 - t) + SDFcolors[i + 1][1] * t);
+                int b = (int)(SDFcolors[i][2] * (1 - t) + SDFcolors[i + 1][2] * t);
+                SDFgradient[index] = std::array<int, 3>{r, g, b};
+
+                index++;
+            }
+        }
 
         float circleRad = 5.f;
         circle.setFillColor(sf::Color::Transparent);
@@ -75,18 +141,14 @@ struct LevelSet {
         }
 
         int donutOuterRad = nX / 3.333333;
-        int donutInnerRad = nX / 6.25;
+        int donutInnerRad = 0;//nX / 6.25;
 
         CreateDonut(donutOuterRad, donutInnerRad);
 
         int squareWidth = nX / 10;
         CreateCenterSquare(squareWidth);
 
-        SetUpPhi();
-
         FastSweep();
-
-        //printPhiAndGrid();
     }
 
     void CreateDonut(int outerRadius, int innerRadius) {
@@ -148,7 +210,7 @@ struct LevelSet {
     void SetUpPhi() {
         for (int i = 0; i < gridSize; ++i) {
             if (grid[i] == SOLID) {
-                phi[i] = 1e6f;
+                phi[i] = 1e10f;
             }
             else {
                 phi[i] = 0.f;
@@ -157,6 +219,10 @@ struct LevelSet {
     }
 
     void FastSweep() {
+        auto start = std::chrono::high_resolution_clock::now();
+
+        SetUpPhi();
+
         const int NSweeps = 4;
         // sweep directions { start, end, step }
         const int dirX[NSweeps][3] = { {0, nX - 1,  1}, {nX - 1, 0, -1}, {nX - 1, 0,  -1}, {0, nX - 1,   1} };
@@ -165,7 +231,7 @@ struct LevelSet {
         double aa[2], eps = 1e-6;
         double d_new, a, b;
         int s, ix, iy, gridPos;
-        const double h = cellSpacing, f = 1.0; // h = 1.0
+        const double h = cellSpacing, f = 1.0;
 
         for (s = 0; s < NSweeps; s++) {
             for (ix = dirX[s][0]; dirX[s][2] * ix <= dirX[s][1]; ix += dirX[s][2]) {
@@ -209,6 +275,11 @@ struct LevelSet {
                 }
             }
         }
+
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+        //std::cout << duration.count() << " milliseconds\n";
     }
 
     void ComputeGradients() {
@@ -253,7 +324,7 @@ struct LevelSet {
     }
 
     sf::Vector2f sampleGradient(sf::Vector2f pos) {
-        float eps = cellSpacing * 0.001f; // cellSpacing * 0.5f, small step in world units
+        float eps = cellSpacing * 0.25f; // cellSpacing * 0.5f, small step in world units
         
         float ddx = (samplePhi(pos + sf::Vector2f{eps, 0}) -
                      samplePhi(pos - sf::Vector2f{eps, 0})) / (2 * eps);
@@ -272,87 +343,218 @@ struct LevelSet {
         return pos - d * grad;
     }
 
+    sf::Vector2f ClosestSurfacePointIterative(sf::Vector2f pos) {
+        auto p = pos;
+        auto phi_p = samplePhi(p);
+        if (phi_p == 0) {
+            return pos;
+        }
+        auto d = sampleGradient(p);
+
+        float eps = 1e-1;
+
+        for (int i = 0; i < numStepIters; ++i) {
+            float alpha = 1.f;
+
+            for (int i = 0; i < numInsideStepIters; ++i) {
+                auto q = p - alpha * phi_p * d;
+                auto phi_q = samplePhi(q);
+                if (abs(phi_q) < abs(phi_p)) {
+                    p = q;
+                    phi_p = phi_q;
+                    d = sampleGradient(q);
+                    if (abs(phi_p) < eps) {
+                        return p;
+                    }
+                }
+                else {
+                    alpha = 0.7 * alpha;
+                }
+            }
+        }
+
+        return p;
+    }
+
     void DrawClosestSurfacePoint() {
         sf::Vector2f mousePos = static_cast<sf::Vector2f>(sf::Mouse::getPosition(window));
-        sf::Vector2f surfacePoint = ClosestSurfacePoint(mousePos);
+        //sf::Vector2f surfacePoint = ClosestSurfacePoint(mousePos);
+        sf::Vector2f surfacePoint = ClosestSurfacePointIterative(mousePos);
 
         circle.setPosition(surfacePoint);
         window.draw(circle);
     }
 
     void DrawSDF() {
-        // Find min and max phi for normalization
+        //int32_t velGradientSize = velGradient.size() - 1;
         auto [minIt, maxIt] = std::minmax_element(phi.begin(), phi.end());
         float minPhi = *minIt;
         float maxPhi = *maxIt;
 
-        // Avoid division by zero
         float range = (maxPhi - minPhi > 1e-6f) ? (maxPhi - minPhi) : 1.f;
+        for (uint32_t i = 0; i < WIDTH / stepSize; ++i) {
+            for (uint32_t j = 0; j < HEIGHT / stepSize; ++j) {
+                int index = i * (HEIGHT / stepSize) + j;
+                int vaIdx = 4 * index;
 
-        for (int i = 0; i < WIDTH / stepSize; ++i) {
-            for (int j = 0; j < HEIGHT / stepSize; ++j) {
-                float x = i * stepSize;
-                float y = j * stepSize;
-                sf::Vector2f pos = {x, y};
+                float px = i * stepSize + stepSize * 0.5f;
+                float py = j * stepSize + stepSize * 0.5f;
+
+                int gx = px / cellSpacing;
+                int gy = py / cellSpacing;
+                int gIdx = gx * nY + gy;
+
+                sf::Vector2f pos = {px, py};
 
                 float dist = samplePhi(pos);
+                if (grid[gIdx] == AIR) {
+                    sf::Color black(0, 0, 0);
+                    SDFva[vaIdx].color = black;
+                    SDFva[vaIdx + 1].color = black;
+                    SDFva[vaIdx + 2].color = black;
+                    SDFva[vaIdx + 3].color = black;
+                    continue;
+                }
 
-                // Normalize dist → [0,1]
+                if (wave) {
+                    dist = maxPhi * sin(dist / 2.f);
+                }
+
                 float intensity = (dist - minPhi) / range;
-                intensity = std::clamp(intensity, 0.f, 1.f) * 255.f;
+                intensity = static_cast<int>(std::clamp(intensity, 0.f, 1.f) * (SDFgradient.size() - 1));
 
-                sf::Color color(intensity, intensity, intensity);
+                auto gradientColor = SDFgradient[intensity];
 
-                tinyRect.setFillColor(color);
-                tinyRect.setPosition(pos);
-                window.draw(tinyRect);
+                sf::Color color(gradientColor[0], gradientColor[1], gradientColor[2]);
+
+                SDFva[vaIdx].color = color;
+                SDFva[vaIdx + 1].color = color;
+                SDFva[vaIdx + 2].color = color;
+                SDFva[vaIdx + 3].color = color;
             }
         }
+        window.draw(SDFva, states);
     }
 
     void update() {
-        DrawSDF();
+        if (drawing) {
+            drawSolids();
+        }
+        if (erasing) {
+            eraseSolids();
+        }
+        if (!drawSolidCells) {
+            DrawSDF();
+        }
         if (drawSolidCells) {
             DrawSolidCells();
         }
         DrawClosestSurfacePoint();
-    }
 
-    void printPhiAndGrid() {
-        std::cout << "phi:" << std::endl;
-        std::cout << "[";
-        for (int j = 0; j < nY; ++j) {
-            for (int i = 0; i < nX; ++i) {
-                int idx = i * nY + j;
-                std::cout << phi[idx] << ", ";
-            }
-            if (j < nY - 1) {
-                std::cout << std::endl;
-            }
-            else {
-                std::cout << "]";
-            }
-        }
-
-        std::cout << std::endl << std::endl;
-
-        std::cout << "grid:" << std::endl;
-        std::cout << "[";
-        for (int j = 0; j < nY; ++j) {
-            for (int i = 0; i < nX; ++i) {
-                int idx = i * nY + j;
-                std::cout << grid[idx] << ", ";
-            }
-            if (j < nY - 1) {
-                std::cout << std::endl;
-            }
-            else {
-                std::cout << "]";
-            }
-        }
+        displayNumStepIters();
+        displayInsideNumStepIters();
     }
 
     void changeDrawSolidCells() {
         drawSolidCells = !drawSolidCells;
+    }
+
+    void increaseNumStepIters() {
+        numStepIters++;
+    }
+
+    void decreaseNumStepIters() {
+        if (numStepIters > 1) {
+            numStepIters--;
+        }
+    }
+
+    void increaseInsideNumStepIters() {
+        numInsideStepIters++;
+    }
+
+    void decreaseInsideNumStepIters() {
+        if (numInsideStepIters > 1) {
+            numInsideStepIters--;
+        }
+    }
+
+    void displayNumStepIters() {
+        text.setPosition(WIDTH - 50, 20);
+        text.setString(std::to_string(numStepIters));
+        window.draw(text);
+    }
+
+    void displayInsideNumStepIters() {
+        text.setPosition(WIDTH - 20, 20);
+        text.setString(std::to_string(numInsideStepIters));
+        window.draw(text);
+    }
+
+    void drawSolids() {
+        sf::Vector2i pos = sf::Mouse::getPosition(window);
+
+        int gx = pos.x / cellSpacing;
+        int gy = pos.y / cellSpacing;
+
+        for (int i = -drawerRadius; i <= drawerRadius; ++i) {
+            for (int j = -drawerRadius; j <= drawerRadius; ++j) {
+                int x = gx + i;
+                int y = gy + j;
+
+                if (x >= 0 && y >= 0 && x <= nX - 1 && y <= nY - 1) {
+
+                    int idx = x * nY + y;
+
+                    grid[idx] = SOLID;
+                }
+            }
+        }
+
+        FastSweep();
+    }
+
+    void eraseSolids() {
+        sf::Vector2i pos = sf::Mouse::getPosition(window);
+
+        int gx = pos.x / cellSpacing;
+        int gy = pos.y / cellSpacing;
+
+        for (int i = -drawerRadius; i <= drawerRadius; ++i) {
+            for (int j = -drawerRadius; j <= drawerRadius; ++j) {
+                int x = gx + i;
+                int y = gy + j;
+
+                if (x >= 0 && y >= 0 && x <= nX - 1 && y <= nY - 1) {
+
+                    int idx = x * nY + y;
+
+                    grid[idx] = AIR;
+                }
+            }
+        }
+
+        FastSweep();
+    }
+
+    void SetDrawer(bool set) {
+        drawing = set;
+    }
+
+    void SetEraser(bool set) {
+        erasing = set;
+    }
+
+    void AddToDrawerRadius(int add) {
+        if (drawerRadius + add < 0) {
+            drawerRadius = 0;
+        }
+        else {
+            drawerRadius += add;
+        }
+    }
+
+    void SwitchSDFRendering() {
+        wave = !wave;
     }
 };
