@@ -32,8 +32,6 @@ struct LevelSet {
 
     sf::RectangleShape rect;
 
-    //sf::RectangleShape tinyRect;
-
     sf::VertexArray SDFva{sf::PrimitiveType::Quads};
     sf::Texture texture;
     sf::RenderStates states;
@@ -78,7 +76,6 @@ struct LevelSet {
         rect.setOutlineThickness(1.f);
         rect.setOutlineColor(sf::Color::White);
 
-        //tinyRect.setSize(sf::Vector2f{stepSize, stepSize});
         vaGridSize = (WIDTH / stepSize) * (HEIGHT / stepSize);
         SDFva.resize(4 * vaGridSize);
         texture.loadFromFile("white_square.png");
@@ -105,14 +102,12 @@ struct LevelSet {
         }
         states.texture = &texture;
 
-        // lerp between the values in colorMap to create a gradient array 
         float num_colors = SDFcolors.size() - 1; // number of colors - 1
         float num_steps = 1.f * SDFgradient.size() / num_colors; //num_steps = 50 * key_range
         int index = 0;
         for (int i = 0; i < num_colors; ++i) {  
             for (int x = 0; x < num_steps; ++x) {
-                float t = 1.f * x / num_steps;  // Interpolation factor
-                // lerp for r, g, b values between colorMap[i] and colorMap [i+1]
+                float t = 1.f * x / num_steps;
                 int r = (int)(SDFcolors[i][0] * (1 - t) + SDFcolors[i + 1][0] * t);
                 int g = (int)(SDFcolors[i][1] * (1 - t) + SDFcolors[i + 1][1] * t);
                 int b = (int)(SDFcolors[i][2] * (1 - t) + SDFcolors[i + 1][2] * t);
@@ -141,7 +136,7 @@ struct LevelSet {
         }
 
         int donutOuterRad = nX / 3.333333;
-        int donutInnerRad = 0;//nX / 6.25;
+        int donutInnerRad = nX / 6.25;
 
         CreateDonut(donutOuterRad, donutInnerRad);
 
@@ -324,7 +319,7 @@ struct LevelSet {
     }
 
     sf::Vector2f sampleGradient(sf::Vector2f pos) {
-        float eps = cellSpacing * 0.25f; // cellSpacing * 0.5f, small step in world units
+        float eps = cellSpacing * 0.25f;
         
         float ddx = (samplePhi(pos + sf::Vector2f{eps, 0}) -
                      samplePhi(pos - sf::Vector2f{eps, 0})) / (2 * eps);
@@ -386,7 +381,6 @@ struct LevelSet {
     }
 
     void DrawSDF() {
-        //int32_t velGradientSize = velGradient.size() - 1;
         auto [minIt, maxIt] = std::minmax_element(phi.begin(), phi.end());
         float minPhi = *minIt;
         float maxPhi = *maxIt;
