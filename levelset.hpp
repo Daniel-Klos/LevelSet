@@ -22,10 +22,7 @@ struct LevelSet {
     float halfSpacing;
 
     std::vector<float> phi;
-
     std::vector<int> grid;
-
-    std::vector<sf::Vector2f> dphi;
 
     int AIR = 0;
     int SOLID = 1;
@@ -277,17 +274,6 @@ struct LevelSet {
         //std::cout << duration.count() << " milliseconds\n";
     }
 
-    void ComputeGradients() {
-        for (int i = 0; i < nX; ++i) {
-            for (int j = 0; j < nY; ++j) {
-                int idx = i * nY + j;
-                float x = i * cellSpacing;
-                float y = j * cellSpacing;
-                dphi[idx] = sampleGradient(sf::Vector2f{x, y});
-            }
-        }
-    }
-
     float samplePhi(sf::Vector2f pos) {
         int x = pos.x;
         int y = pos.y;
@@ -380,6 +366,71 @@ struct LevelSet {
         window.draw(circle);
     }
 
+    void update() {
+        if (drawing) {
+            drawSolids();
+        }
+        if (erasing) {
+            eraseSolids();
+        }
+        if (!drawSolidCells) {
+            DrawSDF();
+        }
+        if (drawSolidCells) {
+            DrawSolidCells();
+        }
+        DrawClosestSurfacePoint();
+
+        displayNumStepIters();
+        displayInsideNumStepIters();
+    }
+
+    void drawSolids() {
+        sf::Vector2i pos = sf::Mouse::getPosition(window);
+
+        int gx = pos.x / cellSpacing;
+        int gy = pos.y / cellSpacing;
+
+        for (int i = -drawerRadius; i <= drawerRadius; ++i) {
+            for (int j = -drawerRadius; j <= drawerRadius; ++j) {
+                int x = gx + i;
+                int y = gy + j;
+
+                if (x >= 0 && y >= 0 && x <= nX - 1 && y <= nY - 1) {
+
+                    int idx = x * nY + y;
+
+                    grid[idx] = SOLID;
+                }
+            }
+        }
+
+        FastSweep();
+    }
+
+    void eraseSolids() {
+        sf::Vector2i pos = sf::Mouse::getPosition(window);
+
+        int gx = pos.x / cellSpacing;
+        int gy = pos.y / cellSpacing;
+
+        for (int i = -drawerRadius; i <= drawerRadius; ++i) {
+            for (int j = -drawerRadius; j <= drawerRadius; ++j) {
+                int x = gx + i;
+                int y = gy + j;
+
+                if (x >= 0 && y >= 0 && x <= nX - 1 && y <= nY - 1) {
+
+                    int idx = x * nY + y;
+
+                    grid[idx] = AIR;
+                }
+            }
+        }
+
+        FastSweep();
+    }
+
     void DrawSDF() {
         auto [minIt, maxIt] = std::minmax_element(phi.begin(), phi.end());
         float minPhi = *minIt;
@@ -430,23 +481,25 @@ struct LevelSet {
         window.draw(SDFva, states);
     }
 
-    void update() {
-        if (drawing) {
-            drawSolids();
-        }
-        if (erasing) {
-            eraseSolids();
-        }
-        if (!drawSolidCells) {
-            DrawSDF();
-        }
-        if (drawSolidCells) {
-            DrawSolidCells();
-        }
-        DrawClosestSurfacePoint();
+    void SetDrawer(bool set) {
+        drawing = set;
+    }
 
-        displayNumStepIters();
-        displayInsideNumStepIters();
+    void SetEraser(bool set) {
+        erasing = set;
+    }
+
+    void AddToDrawerRadius(int add) {
+        if (drawerRadius + add < 0) {
+            drawerRadius = 0;
+        }
+        else {
+            drawerRadius += add;
+        }
+    }
+
+    void SwitchSDFRendering() {
+        wave = !wave;
     }
 
     void changeDrawSolidCells() {
@@ -483,72 +536,5 @@ struct LevelSet {
         text.setPosition(WIDTH - 20, 20);
         text.setString(std::to_string(numInsideStepIters));
         window.draw(text);
-    }
-
-    void drawSolids() {
-        sf::Vector2i pos = sf::Mouse::getPosition(window);
-
-        int gx = pos.x / cellSpacing;
-        int gy = pos.y / cellSpacing;
-
-        for (int i = -drawerRadius; i <= drawerRadius; ++i) {
-            for (int j = -drawerRadius; j <= drawerRadius; ++j) {
-                int x = gx + i;
-                int y = gy + j;
-
-                if (x >= 0 && y >= 0 && x <= nX - 1 && y <= nY - 1) {
-
-                    int idx = x * nY + y;
-
-                    grid[idx] = SOLID;
-                }
-            }
-        }
-
-        FastSweep();
-    }
-
-    void eraseSolids() {
-        sf::Vector2i pos = sf::Mouse::getPosition(window);
-
-        int gx = pos.x / cellSpacing;
-        int gy = pos.y / cellSpacing;
-
-        for (int i = -drawerRadius; i <= drawerRadius; ++i) {
-            for (int j = -drawerRadius; j <= drawerRadius; ++j) {
-                int x = gx + i;
-                int y = gy + j;
-
-                if (x >= 0 && y >= 0 && x <= nX - 1 && y <= nY - 1) {
-
-                    int idx = x * nY + y;
-
-                    grid[idx] = AIR;
-                }
-            }
-        }
-
-        FastSweep();
-    }
-
-    void SetDrawer(bool set) {
-        drawing = set;
-    }
-
-    void SetEraser(bool set) {
-        erasing = set;
-    }
-
-    void AddToDrawerRadius(int add) {
-        if (drawerRadius + add < 0) {
-            drawerRadius = 0;
-        }
-        else {
-            drawerRadius += add;
-        }
-    }
-
-    void SwitchSDFRendering() {
-        wave = !wave;
     }
 };
