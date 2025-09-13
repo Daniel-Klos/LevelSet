@@ -1,4 +1,4 @@
-Implementation of the Level Set method using fast sweeping and an iterative step approach for accurate surface point finding.
+Implementation of the Level Set method using fast sweeping and an iterative step approach along the level set gradient for fast, accurate surface point finding.
 
 Takes in a grid of arbitrary geometry (filled with solid/air cells) and finds the closest point out of the shape.
 
